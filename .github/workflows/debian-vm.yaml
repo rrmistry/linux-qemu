@@ -1,0 +1,85 @@
+name: Build Debian 13 XFCE qcow2 (Haven / QEMU)
+
+# Manual only: Actions tab -> "Build Debian 13 XFCE qcow2" -> Run workflow
+#   or: gh workflow run debian-vm.yaml
+# Published at a stable URL (rolling release "debian-13-vm"):
+#   https://github.com/rrmistry/linux-qemu/releases/download/debian-13-vm/debian-13-xfce-arm64.qcow2
+#   https://github.com/rrmistry/linux-qemu/releases/download/debian-13-vm/debian-13-xfce-amd64.qcow2
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build and boot-test (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: arm64, runner: ubuntu-24.04-arm }  # native arm64: chroot install, no emulation
+          - { arch: amd64, runner: ubuntu-latest }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-utils qemu-system-x86 qemu-system-arm qemu-efi-aarch64 cloud-guest-utils socat netpbm
+
+      - name: Build image
+        run: sudo ARCH=${{ matrix.arch }} src/os/debian/build-vm.sh
+
+      # Same machine shape Haven launches (see GlassHaven/Haven SystemVmManager.qemuVncCommand),
+      # plus a serial log and a monitor socket for the screenshot.
+      - name: Boot test (Haven's QEMU command)
+        run: |
+          img=$PWD/debian-13-xfce-${{ matrix.arch }}.qcow2
+          if [ "${{ matrix.arch }}" = arm64 ]; then
+            vm="qemu-system-aarch64 -M virt -cpu max -bios /usr/share/qemu-efi-aarch64/QEMU_EFI.fd -device virtio-gpu-pci \
+                -device qemu-xhci -device usb-kbd -device usb-tablet"
+          else
+            vm="qemu-system-x86_64 -M pc -enable-kvm -cpu host -vga std -boot c"
+          fi
+          sudo $vm -m 2048 -smp 2 -no-reboot \
+            -drive file=$img,if=virtio,format=qcow2,snapshot=on \
+            -vnc 127.0.0.1:0 -netdev user,id=n0 -device virtio-net-pci,netdev=n0 \
+            -serial file:boot.log -monitor unix:mon.sock,server,nowait &
+          timeout 30m bash -c 'until sudo grep -q GRAPHICAL-OK boot.log 2>/dev/null; do sleep 10; done' \
+            || { sudo tail -50 boot.log; exit 1; }
+          # Screenshots over ~9 min: emulated arm64 (TCG + software GL) draws the desktop slowly
+          for i in 1 2 3 4 5 6; do
+            sleep 90
+            echo "screendump $PWD/screen.ppm" | sudo socat - UNIX-CONNECT:mon.sock; sleep 5
+            sudo pnmtopng screen.ppm > screen-${{ matrix.arch }}-$i.png
+          done
+          # First-boot VS Code install: checked on amd64 (KVM); arm64 TCG is too slow for CI
+          if [ "${{ matrix.arch }}" = amd64 ]; then
+            timeout 20m bash -c 'until sudo grep -q VSCODE-OK boot.log; do sleep 10; done' \
+              || { echo "VS Code first-boot install did not finish"; exit 1; }
+          fi
+          echo quit | sudo socat - UNIX-CONNECT:mon.sock || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: boot-${{ matrix.arch }}
+          path: |
+            boot.log
+            screen-*.png
+
+      - name: Publish to rolling release
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
+        with:
+          tag_name: debian-13-vm
+          name: Debian 13 XFCE VM (qcow2)
+          body: |
+            Debian 13 + XFCE (auto-login, user `debian` / password `debian`), Firefox ESR,
+            Neovim (latest) with rrmistry.nvim, rootless podman, git/python/node LTS.
+            VS Code (latest) installs automatically in the background on first boot (needs network).
+            Boots without a cloud-init seed; built for Haven / QEMU.
+          files: debian-13-xfce-${{ matrix.arch }}.qcow2

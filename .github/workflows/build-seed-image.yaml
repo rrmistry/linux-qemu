@@ -10,8 +10,6 @@ on:
   push:
     tags:
       - "v*.*.*"
-    branches:
-      - main
   # schedule:
   #   # - cron: "0 12 * * 1,3,5" # 12 PM UTC daily on Monday, Wednesday and Friday
   #   - cron: "0 12 15 * *" # 12 PM UTC on the 15th day of every month

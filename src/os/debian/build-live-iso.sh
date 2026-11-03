@@ -5,6 +5,11 @@ set -euxo pipefail
 #     -e AUTHORIZED_KEYS="$(cat ~/.ssh/id_rsa.pub)" debian:trixie bash build-live-iso.sh
 # Output: ./live/*.iso.  Live login: user / live (ssh password login stays on).
 apt-get update && apt-get install -y live-build curl
+# live-build's GRUB default entry uses a bare glob (vmlinuz-*amd64): with two Debian kernels it would pick
+# the first (6.12) and label it with the last flavour ("surface"). Pick the newest, like its syslinux code.
+f=/usr/lib/live/build/binary_grub_cfg
+perl -pi -e 's/\$\(basename chroot\/boot\/vmlinuz-\*\$\{DEFAULT_FLAVOUR\}\)/\$(basename "\$(ls -1 chroot\/boot\/vmlinuz-*\${DEFAULT_FLAVOUR} | sort -V | tail -n 1)")/; s/Live system \(\$\{_FLAVOUR\}/Live system (\${FLAVOUR_LIVE}/' $f
+grep -q 'sort -V | tail -n 1' $f && ! grep -q 'Live system (${_FLAVOUR}' $f || { echo 'live-build patch failed'; exit 1; }
 mkdir -p live && cd live
 lb config --distribution trixie \
   --archive-areas "main contrib non-free non-free-firmware" \
@@ -32,10 +37,13 @@ firmware-atheros firmware-amd-graphics intel-microcode amd64-microcode
 iptsd libwacom-surface iio-sensor-proxy bluez blueman alsa-utils usbutils
 EOF
 
-# Two kernels. Boot menu: "Live system (amd64)" = Debian's signed kernel, default, works with Secure
-# Boot on any laptop. "Live system (surface)" = linux-surface: Surface keyboard/trackpad (Debian lacks
-# surface_aggregator_hub) and touch (IPTS); needs Secure Boot off. Installed systems keep both and
-# pick the default per machine (see kernel-default.cfg below).
+# Kernels (all in one ISO; GRUB lists each as "Live system, kernel <version>"):
+#  - default: Debian trixie-backports kernel + firmware + Mesa (newest hardware), Debian-signed: Secure Boot OK
+#  - Debian 6.12 LTS (stable), Debian-signed: fallback if the newer kernel misbehaves
+#  - linux-surface: Surface keyboard/trackpad (Debian lacks surface_aggregator_hub) + touch (IPTS); Secure Boot off
+# Installed systems keep all three and pick the default per machine (kernel-default.cfg below).
+echo 'deb http://deb.debian.org/debian trixie-backports main contrib non-free non-free-firmware' \
+  | tee config/archives/backports.list.chroot > config/archives/backports.list.binary
 curl -fsSL https://raw.githubusercontent.com/linux-surface/linux-surface/master/pkg/keys/surface.asc \
   -o config/archives/linux-surface.key.chroot
 cp config/archives/linux-surface.key.chroot config/archives/linux-surface.key.binary
@@ -86,6 +94,11 @@ printf '[Service]\nExecStartPre=\nExecStartPre=/usr/bin/ssh-keygen -A\nExecStart
   > /etc/systemd/system/ssh.service.d/hostkeys.conf
 systemctl enable x11vnc boot-marker ssh NetworkManager
 systemctl set-default graphical.target
+# Backports kernel/firmware/Mesa on top of stable; keep the stable 6.12 kernel as a fallback boot entry
+apt-mark manual $(dpkg -l 'linux-image-6.*-amd64' | awk '/^ii/{print $2}')
+apt-get install -y -t trixie-backports linux-image-amd64 \
+  $(dpkg -l 'firmware-*' 'mesa-*' libgl1-mesa-dri libglx-mesa0 libegl-mesa0 libgbm1 2>/dev/null | awk '/^ii/{print $2}')
+ls /boot/vmlinuz-*; test "$(ls /boot/vmlinuz-*-amd64 | wc -l)" -eq 2   # stable 6.12 + backports
 # linux-surface's kernel .deb doesn't depend on initramfs-tools, so it can install before it and get no initrd
 for k in /boot/vmlinuz-*; do v=${k#/boot/vmlinuz-}; [ -e /boot/initrd.img-$v ] || update-initramfs -c -k "$v"; done
 

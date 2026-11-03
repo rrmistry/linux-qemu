@@ -10,6 +10,20 @@ apt-get update && apt-get install -y live-build curl
 f=/usr/lib/live/build/binary_grub_cfg
 perl -pi -e 's/\$\(basename chroot\/boot\/vmlinuz-\*\$\{DEFAULT_FLAVOUR\}\)/\$(basename "\$(ls -1 chroot\/boot\/vmlinuz-*\${DEFAULT_FLAVOUR} | sort -V | tail -n 1)")/; s/Live system \(\$\{_FLAVOUR\}/Live system (\${FLAVOUR_LIVE}/' $f
 grep -q 'sort -V | tail -n 1' $f && ! grep -q 'Live system (${_FLAVOUR}' $f || { echo 'live-build patch failed'; exit 1; }
+# live-build copies MokManager (mmx64.efi) next to shim only in its shim-only fallback. Ship it in the normal
+# signed path too, so shim can run MokManager to enroll the linux-surface key (Secure Boot stays on).
+f=/usr/lib/live/build/binary_grub-efi
+cat > /tmp/mm.pl <<'PL'
+my $n = 0;
+while (<>) {
+  print;
+  if (!$n && index($_, '/grub-efi-temp/EFI/boot/boot\$efi_name.efi') >= 0) {
+    print "\t\tcp -a \${_CHROOT_DIR}/usr/lib/shim/mm\\\$efi_name.efi.signed \${_CHROOT_DIR}/grub-efi-temp/EFI/boot/mm\\\$efi_name.efi\n"; $n = 1;
+  }
+}
+PL
+perl -i /tmp/mm.pl $f
+[ "$(grep -c 'grub-efi-temp/EFI/boot/mm' $f)" -eq 2 ] || { echo 'live-build MokManager patch failed'; exit 1; }
 mkdir -p live && cd live
 lb config --distribution trixie \
   --archive-areas "main contrib non-free non-free-firmware" \
@@ -35,6 +49,7 @@ gparted exfatprogs dosfstools debootstrap parted gdisk rsync
 firmware-linux firmware-misc-nonfree firmware-iwlwifi firmware-realtek
 firmware-atheros firmware-amd-graphics intel-microcode amd64-microcode
 iptsd libwacom-surface iio-sensor-proxy bluez blueman alsa-utils usbutils
+mokutil shim-helpers-amd64-signed
 EOF
 
 # Kernels (all in one ISO; GRUB lists each as "Live system, kernel <version>"):
@@ -59,6 +74,32 @@ cat > config/includes.chroot/etc/default/grub.d/kernel-default.cfg <<'EOF'
 # Installed system: Surface -> linux-surface kernel, anything else -> Debian's signed kernel (Secure Boot OK)
 if grep -qs '^Microsoft' /sys/class/dmi/id/sys_vendor; then k='*-surface'; else k='*-amd64'; fi
 GRUB_TOP_LEVEL=$(ls /boot/vmlinuz-$k 2>/dev/null | sort -V | tail -1)
+EOF
+
+# Surface + Secure Boot on: queue the linux-surface signing key (CN=linux-surface) for MokManager, no keyboard needed.
+# Next boot, shim shows MokManager (blue screen; the Surface keyboard works there): Enroll MOK > Continue > Yes >
+# password "surface" > Reboot. Then "Live system, kernel *-surface" boots with Secure Boot still on.
+mkdir -p config/includes.chroot/usr/local/sbin
+cat > config/includes.chroot/usr/local/sbin/surface-mok <<'EOF'
+#!/bin/sh
+cer=/usr/share/linux-surface-secureboot/surface.cer
+grep -qs '^Microsoft' /sys/class/dmi/id/sys_vendor || exit 0
+mokutil --sb-state 2>/dev/null | grep -q 'SecureBoot enabled' || exit 0
+mokutil --test-key $cer | grep -qE 'already enrolled|enrollment request' && exit 0
+printf 'surface\nsurface\n' | mokutil --import $cer || exit 0
+echo MOK-QUEUED > /dev/ttyS0 2>/dev/null || true
+EOF
+chmod +x config/includes.chroot/usr/local/sbin/surface-mok
+cat > config/includes.chroot/etc/systemd/system/surface-mok.service <<'EOF'
+[Unit]
+Description=Queue linux-surface Secure Boot key for MokManager (Microsoft hardware, Secure Boot on)
+ConditionPathExists=/sys/firmware/efi
+After=sys-firmware-efi-efivars.mount
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/surface-mok
+[Install]
+WantedBy=multi-user.target
 EOF
 
 cat > config/includes.chroot/etc/systemd/system/x11vnc.service <<'EOF'
@@ -92,7 +133,11 @@ rm -f /etc/ssh/ssh_host_*          # never ship shared host keys; regenerated at
 mkdir -p /etc/systemd/system/ssh.service.d
 printf '[Service]\nExecStartPre=\nExecStartPre=/usr/bin/ssh-keygen -A\nExecStartPre=/usr/sbin/sshd -t\n' \
   > /etc/systemd/system/ssh.service.d/hostkeys.conf
-systemctl enable x11vnc boot-marker ssh NetworkManager
+systemctl enable x11vnc boot-marker ssh NetworkManager surface-mok
+# linux-surface signing cert (from its MOK package; not installed: its postinst may try an interactive mokutil)
+cd /tmp && apt-get download linux-surface-secureboot-mok && dpkg-deb -x linux-surface-secureboot-mok_*.deb /tmp/mok
+install -D -m644 /tmp/mok/usr/share/linux-surface-secureboot/surface.cer /usr/share/linux-surface-secureboot/surface.cer
+rm -rf /tmp/mok /tmp/linux-surface-secureboot-mok_*.deb; cd /
 systemctl set-default graphical.target
 # Backports kernel/firmware/Mesa on top of stable; keep the stable 6.12 kernel as a fallback boot entry
 apt-mark manual $(dpkg -l 'linux-image-6.*-amd64' | awk '/^ii/{print $2}')

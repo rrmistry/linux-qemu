@@ -40,3 +40,7 @@ Built by `.github/workflows/debian-live-usb.yaml` (manual: `gh workflow run debi
 - Write to USB (macOS; use `/bin/dd`, GNU dd rejects `4m`):
   `diskutil unmountDisk /dev/diskN && sudo /bin/dd if=debian-13-xfce-live-amd64.iso of=/dev/rdiskN bs=4m status=progress`
 - Local build: `docker run --rm --privileged -v "$PWD":/w -w /w -e AUTHORIZED_KEYS="$(cat ~/.ssh/id_rsa.pub)" debian:trixie bash build-live-iso.sh`
+- **Surface with Secure Boot on** (one-time per machine): boot the default entry and wait ~1 min; the linux-surface
+  key is queued automatically (`surface-mok.service`). Hold power to turn off, power on: shim shows MokManager
+  (blue screen) → Enroll MOK → Continue → Yes → password `surface` → Reboot. Then pick
+  **Live system, kernel …-surface**. (Or simply turn Secure Boot off in the Surface UEFI: hold Volume Up at power on.)

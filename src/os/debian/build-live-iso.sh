@@ -10,7 +10,7 @@ lb config --distribution trixie \
   --archive-areas "main contrib non-free non-free-firmware" \
   --debian-installer none --binary-images iso-hybrid \
   --firmware-chroot true --firmware-binary true \
-  --iso-volume DEBIAN13-XFCE-LIVE \
+  --iso-volume DEBIAN13-XFCE-LIVE --linux-flavours surface \
   --bootappend-live "boot=live components username=user hostname=debian-live console=ttyS0,115200 console=tty0"
 
 # Auto-boot the default (live) entry after 5 s instead of waiting forever at the menu
@@ -24,15 +24,22 @@ network-manager network-manager-applet openssh-server x11vnc sudo firefox-esr
 calamares calamares-settings-debian
 podman uidmap slirp4netns passt fuse-overlayfs dbus-user-session
 git curl wget jq vim tmux htop unzip zip build-essential
-python3 python3-pip python3-venv pipx nodejs npm ripgrep fd-find
+python3 python3-pip python3-venv pipx ripgrep fd-find
 gparted exfatprogs dosfstools debootstrap parted gdisk rsync
 firmware-linux firmware-misc-nonfree firmware-iwlwifi firmware-realtek
 firmware-atheros firmware-amd-graphics intel-microcode amd64-microcode
+iptsd libwacom-surface iio-sensor-proxy bluez blueman alsa-utils usbutils
 EOF
 
-mkdir -p config/packages.chroot
-curl -fL -o config/packages.chroot/code_latest_amd64.deb \
-  'https://update.code.visualstudio.com/latest/linux-deb-x64/stable'
+# Kernel: linux-surface (linux-image-surface via --linux-flavours above). Debian's kernel lacks
+# surface_aggregator_hub (Surface Book 3 keyboard/trackpad) and IPTS (touch); linux-surface has both
+# and still boots generic x86_64. Repo stays in the installed system for kernel updates.
+# Secure Boot must be off (linux-surface kernel is not signed by Debian).
+curl -fsSL https://raw.githubusercontent.com/linux-surface/linux-surface/master/pkg/keys/surface.asc \
+  -o config/archives/linux-surface.key.chroot
+cp config/archives/linux-surface.key.chroot config/archives/linux-surface.key.binary
+echo 'deb [arch=amd64] https://pkg.surfacelinux.com/debian release main' \
+  | tee config/archives/linux-surface.list.chroot > config/archives/linux-surface.list.binary
 
 mkdir -p config/includes.chroot/etc/skel/.ssh \
          config/includes.chroot/etc/systemd/system

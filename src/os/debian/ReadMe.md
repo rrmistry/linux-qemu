@@ -21,3 +21,16 @@ qemu-system-aarch64 -M virt -cpu max -m 2048 -smp 2 -bios QEMU_EFI.fd \
 ```
 
 Local build (Linux, same arch as target): `sudo ./build-vm.sh`
+
+# Debian 13 XFCE live USB ISO (amd64)
+
+Boots a full XFCE desktop on any x86_64 PC (UEFI or BIOS), with an "Install Debian" (Calamares) icon to install to disk.
+Built by `.github/workflows/debian-live-usb.yaml` (manual: `gh workflow run debian-live-usb.yaml`), boot-tested in CI.
+
+- Live login `user` / `live`; ssh (password + keys from repo variable `LIVE_SSH_AUTHORIZED_KEYS`), x11vnc on localhost:5900
+  (`ssh -L 5900:localhost:5900 user@<ip>`), Firefox ESR, VS Code, Neovim + rrmistry.nvim, podman, dev tools, gparted, firmware.
+- ISO is ~2.2 GB, over the 2 GiB release limit, so it is a workflow artifact (kept 7 days):
+  `gh run download -n debian-13-xfce-live-amd64-iso`
+- Write to USB (macOS; use `/bin/dd`, GNU dd rejects `4m`):
+  `diskutil unmountDisk /dev/diskN && sudo /bin/dd if=debian-13-xfce-live-amd64.iso of=/dev/rdiskN bs=4m status=progress`
+- Local build: `docker run --rm --privileged -v "$PWD":/w -w /w -e AUTHORIZED_KEYS="$(cat ~/.ssh/id_rsa.pub)" debian:trixie bash build-live-iso.sh`

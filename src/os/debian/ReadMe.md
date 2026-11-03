@@ -32,10 +32,10 @@ Built by `.github/workflows/debian-live-usb.yaml` (manual: `gh workflow run debi
 - Three kernels. Default **Live system (amd64)** = Debian trixie-backports kernel + firmware + Mesa (newest hardware).
   Also listed as **Live system, kernel <version>**: Debian 6.12 LTS (fallback) and `*-surface`
   ([linux-surface](https://github.com/linux-surface/linux-surface): Surface keyboard/trackpad/touch).
-  Both Debian kernels boot with Secure Boot on; linux-surface needs Secure Boot off. Installed systems keep all
+  Both Debian kernels boot with Secure Boot on; linux-surface needs its key enrolled once (below) or Secure Boot off. Installed systems keep all
   three; GRUB defaults to linux-surface on Microsoft hardware, newest Debian kernel elsewhere
   (`/etc/default/grub.d/kernel-default.cfg`).
-- ISO is ~2.2 GB, over the 2 GiB release limit, so it is a workflow artifact (kept 7 days):
+- ISO is ~3.4 GB, over the 2 GiB release limit, so it is a workflow artifact (kept 7 days):
   `gh run download -n debian-13-xfce-live-amd64-iso`
 - Write to USB (macOS; use `/bin/dd`, GNU dd rejects `4m`):
   `diskutil unmountDisk /dev/diskN && sudo /bin/dd if=debian-13-xfce-live-amd64.iso of=/dev/rdiskN bs=4m status=progress`
@@ -43,4 +43,5 @@ Built by `.github/workflows/debian-live-usb.yaml` (manual: `gh workflow run debi
 - **Surface with Secure Boot on** (one-time per machine): boot the default entry and wait ~1 min; the linux-surface
   key is queued automatically (`surface-mok.service`). Hold power to turn off, power on: shim shows MokManager
   (blue screen) → Enroll MOK → Continue → Yes → password `surface` → Reboot. Then pick
-  **Live system, kernel …-surface**. (Or simply turn Secure Boot off in the Surface UEFI: hold Volume Up at power on.)
+  **Live system, kernel …-surface** (until the key is enrolled it fails with `bad shim signature`). Verified on a
+  Surface Book 3: keyboard, trackpad and touch work. (Or simply turn Secure Boot off in the Surface UEFI: hold Volume Up at power on.)

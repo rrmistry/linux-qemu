@@ -27,16 +27,23 @@ jobs:
           sudo mv live/*.iso debian-13-xfce-live-amd64.iso
           sha256sum debian-13-xfce-live-amd64.iso | tee debian-13-xfce-live-amd64.iso.sha256
 
-      - name: Boot test (UEFI + KVM)
+      - name: Boot test (UEFI Secure Boot + KVM)
         run: |
           sudo apt-get install -y qemu-system-x86 ovmf socat netpbm
-          sudo qemu-system-x86_64 -enable-kvm -cpu host -m 4096 -smp 4 -bios /usr/share/ovmf/OVMF.fd \
+          # Secure Boot ON with Microsoft keys, like a store laptop: proves the default (Debian signed) entry boots
+          cp /usr/share/OVMF/OVMF_VARS_4M.ms.fd vars.fd
+          sudo qemu-system-x86_64 -enable-kvm -cpu host -m 4096 -smp 4 \
+            -machine q35,smm=on -global driver=cfi.pflash01,property=secure,value=on \
+            -drive if=pflash,format=raw,unit=0,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.secboot.fd \
+            -drive if=pflash,format=raw,unit=1,file=vars.fd \
             -cdrom debian-13-xfce-live-amd64.iso -vga std -display none \
             -netdev user,id=n0 -device virtio-net-pci,netdev=n0 \
             -serial file:boot.log -monitor unix:mon.sock,server,nowait &
           shot() { echo "screendump $PWD/screen.ppm" | sudo socat - UNIX-CONNECT:mon.sock; sleep 3; sudo pnmtopng screen.ppm > screen-live.png; }
           timeout 15m bash -c 'until sudo grep -q GRAPHICAL-OK boot.log 2>/dev/null; do sleep 5; done' \
             || { shot; sudo tail -50 boot.log; exit 1; }
+          sudo grep -a -i 'secure boot' boot.log || true
+          sudo grep -aqi 'secure boot enabled' boot.log || { echo 'Secure Boot was not enabled'; exit 1; }
           sleep 45
           shot
           echo quit | sudo socat - UNIX-CONNECT:mon.sock || true

@@ -10,7 +10,7 @@ lb config --distribution trixie \
   --archive-areas "main contrib non-free non-free-firmware" \
   --debian-installer none --binary-images iso-hybrid \
   --firmware-chroot true --firmware-binary true \
-  --iso-volume DEBIAN13-XFCE-LIVE --linux-flavours surface \
+  --iso-volume DEBIAN13-XFCE-LIVE --linux-flavours "amd64 surface" \
   --debootstrap-options "--include=ca-certificates" \
   --bootappend-live "boot=live components username=user hostname=debian-live console=ttyS0,115200 console=tty0"
 
@@ -32,10 +32,10 @@ firmware-atheros firmware-amd-graphics intel-microcode amd64-microcode
 iptsd libwacom-surface iio-sensor-proxy bluez blueman alsa-utils usbutils
 EOF
 
-# Kernel: linux-surface (linux-image-surface via --linux-flavours above). Debian's kernel lacks
-# surface_aggregator_hub (Surface Book 3 keyboard/trackpad) and IPTS (touch); linux-surface has both
-# and still boots generic x86_64. Repo stays in the installed system for kernel updates.
-# Secure Boot must be off (linux-surface kernel is not signed by Debian).
+# Two kernels. Boot menu: "Live system (amd64)" = Debian's signed kernel, default, works with Secure
+# Boot on any laptop. "Live system (surface)" = linux-surface: Surface keyboard/trackpad (Debian lacks
+# surface_aggregator_hub) and touch (IPTS); needs Secure Boot off. Installed systems keep both and
+# pick the default per machine (see kernel-default.cfg below).
 curl -fsSL https://raw.githubusercontent.com/linux-surface/linux-surface/master/pkg/keys/surface.asc \
   -o config/archives/linux-surface.key.chroot
 cp config/archives/linux-surface.key.chroot config/archives/linux-surface.key.binary
@@ -45,6 +45,13 @@ echo 'deb [arch=amd64] https://pkg.surfacelinux.com/debian release main' \
 mkdir -p config/includes.chroot/etc/skel/.ssh \
          config/includes.chroot/etc/systemd/system
 printf '%s\n' "${AUTHORIZED_KEYS:-}" > config/includes.chroot/etc/skel/.ssh/authorized_keys
+
+mkdir -p config/includes.chroot/etc/default/grub.d
+cat > config/includes.chroot/etc/default/grub.d/kernel-default.cfg <<'EOF'
+# Installed system: Surface -> linux-surface kernel, anything else -> Debian's signed kernel (Secure Boot OK)
+if grep -qs '^Microsoft' /sys/class/dmi/id/sys_vendor; then k='*-surface'; else k='*-amd64'; fi
+GRUB_TOP_LEVEL=$(ls /boot/vmlinuz-$k 2>/dev/null | sort -V | tail -1)
+EOF
 
 cat > config/includes.chroot/etc/systemd/system/x11vnc.service <<'EOF'
 [Unit]
@@ -79,6 +86,8 @@ printf '[Service]\nExecStartPre=\nExecStartPre=/usr/bin/ssh-keygen -A\nExecStart
   > /etc/systemd/system/ssh.service.d/hostkeys.conf
 systemctl enable x11vnc boot-marker ssh NetworkManager
 systemctl set-default graphical.target
+# linux-surface's kernel .deb doesn't depend on initramfs-tools, so it can install before it and get no initrd
+for k in /boot/vmlinuz-*; do v=${k#/boot/vmlinuz-}; [ -e /boot/initrd.img-$v ] || update-initramfs -c -k "$v"; done
 
 # Neovim latest release + rrmistry.nvim (AstroNvim) for the live user, plugins pre-synced
 curl -fL https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz | tar xz -C /opt

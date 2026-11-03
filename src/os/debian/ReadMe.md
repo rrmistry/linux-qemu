@@ -29,8 +29,10 @@ Built by `.github/workflows/debian-live-usb.yaml` (manual: `gh workflow run debi
 
 - Live login `user` / `live`; ssh (password + keys from repo variable `LIVE_SSH_AUTHORIZED_KEYS`), x11vnc on localhost:5900
   (`ssh -L 5900:localhost:5900 user@<ip>`), Firefox ESR, Neovim + rrmistry.nvim, podman, dev tools, gparted, firmware.
-- Kernel is [linux-surface](https://github.com/linux-surface/linux-surface) (Surface keyboard/trackpad/touch; boots any x86_64).
-  **Disable Secure Boot** before booting. Installed systems keep the linux-surface apt repo for kernel updates.
+- Two kernels in the boot menu: **Live system (amd64)** (default) is Debian's signed kernel and works with
+  Secure Boot on, for any laptop. **Live system (surface)** is [linux-surface](https://github.com/linux-surface/linux-surface)
+  (Surface keyboard/trackpad/touch) and needs Secure Boot off. Installed systems keep both; GRUB defaults to
+  linux-surface on Microsoft hardware, Debian's kernel elsewhere (`/etc/default/grub.d/kernel-default.cfg`).
 - ISO is ~2.2 GB, over the 2 GiB release limit, so it is a workflow artifact (kept 7 days):
   `gh run download -n debian-13-xfce-live-amd64-iso`
 - Write to USB (macOS; use `/bin/dd`, GNU dd rejects `4m`):

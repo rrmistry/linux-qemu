@@ -18,10 +18,10 @@
         "act --workflows .github/workflows/build-seed-image.yaml --no-cache-server --container-architecture linux/amd64"
       ],
       "tmux": [
-        "tmuxinator start alpine-qemu -p $PWD/.tmuxinator.yml"
+        "tmuxinator start linux-qemu -p $PWD/.tmuxinator.yml"
       ],
       "tmux:stop": [
-        "tmuxinator stop alpine-qemu -p $PWD/.tmuxinator.yml"
+        "tmuxinator stop linux-qemu -p $PWD/.tmuxinator.yml"
       ]
     }
   }

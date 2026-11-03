@@ -11,6 +11,7 @@ lb config --distribution trixie \
   --debian-installer none --binary-images iso-hybrid \
   --firmware-chroot true --firmware-binary true \
   --iso-volume DEBIAN13-XFCE-LIVE --linux-flavours surface \
+  --debootstrap-options "--include=ca-certificates" \
   --bootappend-live "boot=live components username=user hostname=debian-live console=ttyS0,115200 console=tty0"
 
 # Auto-boot the default (live) entry after 5 s instead of waiting forever at the menu

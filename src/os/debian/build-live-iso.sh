@@ -14,7 +14,7 @@ mkdir -p live && cd live
 lb config --distribution trixie \
   --archive-areas "main contrib non-free non-free-firmware" \
   --debian-installer none --binary-images iso-hybrid \
-  --firmware-chroot true --firmware-binary true \
+  --firmware-chroot true --firmware-binary false \
   --iso-volume DEBIAN13-XFCE-LIVE --linux-flavours "amd64 surface" \
   --debootstrap-options "--include=ca-certificates" \
   --bootappend-live "boot=live components username=user hostname=debian-live console=ttyS0,115200 console=tty0"

@@ -43,7 +43,7 @@ cd src/os/alpine
 
 ### Directory Structure
 - `src/os/alpine/` - Alpine Linux VM configuration and scripts
-- `src/os/debian/` - Debian 13 XFCE: qcow2 from the cloud image (`build-vm.sh`) and live USB ISO via live-build (`build-live-iso.sh`); see its ReadMe.md
+- `src/os/debian/` - Debian 13: XFCE qcow2 from the cloud image (`build-vm.sh`) and GNOME+XFCE live USB ISO via live-build (`build-live-iso.sh`); see its ReadMe.md
 - New distros: add `src/os/<distro>/` + a manual (`workflow_dispatch`) workflow with a QEMU boot test
 - `.github/workflows/` - CI/CD pipeline for building and releasing seed images
 - `.github/actions/qemu-build-and-test/` - Reusable action for QEMU VM testing

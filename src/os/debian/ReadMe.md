@@ -22,24 +22,27 @@ qemu-system-aarch64 -M virt -cpu max -m 2048 -smp 2 -bios QEMU_EFI.fd \
 
 Local build (Linux, same arch as target): `sudo ./build-vm.sh`
 
-# Debian 13 XFCE live USB ISO (amd64)
+# Debian 13 live USB ISO (amd64): GNOME + XFCE
 
-Boots a full XFCE desktop on any x86_64 PC (UEFI or BIOS), with an "Install Debian" (Calamares) icon to install to disk.
-Built by `.github/workflows/debian-live-usb.yaml` (manual: `gh workflow run debian-live-usb.yaml`), boot-tested in CI.
+Boots a full desktop on any x86_64 PC (UEFI or BIOS), with an "Install Debian" (Calamares) icon to install to disk.
+Every boot entry exists twice: **GNOME: …** (default; GDM/Wayland, for touch 2-in-1s) and **XFCE: …** (LightDM,
+light, for netbooks). Both share one filesystem, so LibreOffice etc. are in both; `desktop=gnome|xfce` on the kernel
+command line picks the display manager (`/usr/lib/systemd/system-generators/desktop-select`).
+Built on a Linux box with `build-live-iso.sh` (below); `.github/workflows/debian-live-usb.yaml` is the older CI path.
 
 - Live login `user` / `live`; ssh (password + keys from repo variable `LIVE_SSH_AUTHORIZED_KEYS`), x11vnc on localhost:5900
-  (`ssh -L 5900:localhost:5900 user@<ip>`), Firefox ESR, Neovim + rrmistry.nvim, podman, dev tools, gparted, firmware.
-- Three kernels. Default **Live system (amd64)** = Debian trixie-backports kernel + firmware + Mesa (newest hardware).
+  (`ssh -L 5900:localhost:5900 user@<ip>`), Firefox ESR, LibreOffice, Neovim + rrmistry.nvim, podman, dev tools, gparted,
+  firmware (incl. Intel SOF audio), pen/touch/rotation (libwacom-surface, iio-sensor-proxy), onboard keyboard (XFCE).
+- Three kernels. Default **GNOME: Live system (amd64)** = Debian trixie-backports kernel + firmware + Mesa (newest hardware).
   Also listed as **Live system, kernel <version>**: Debian 6.12 LTS (fallback) and `*-surface`
   ([linux-surface](https://github.com/linux-surface/linux-surface): Surface keyboard/trackpad/touch).
   Both Debian kernels boot with Secure Boot on; linux-surface needs its key enrolled once (below) or Secure Boot off. Installed systems keep all
   three; GRUB defaults to linux-surface on Microsoft hardware, newest Debian kernel elsewhere
   (`/etc/default/grub.d/kernel-default.cfg`).
-- ISO is ~3.4 GB, over the 2 GiB release limit, so it is a workflow artifact (kept 7 days):
-  `gh run download -n debian-13-xfce-live-amd64-iso`
+- ISO is ~3.8 GB (over the 2 GiB release-asset limit, so not published).
 - Write to USB (macOS; use `/bin/dd`, GNU dd rejects `4m`):
-  `diskutil unmountDisk /dev/diskN && sudo /bin/dd if=debian-13-xfce-live-amd64.iso of=/dev/rdiskN bs=4m status=progress`
-- Local build: `docker run --rm --privileged -v "$PWD":/w -w /w -e AUTHORIZED_KEYS="$(cat ~/.ssh/id_rsa.pub)" debian:trixie bash build-live-iso.sh`
+  `diskutil unmountDisk /dev/diskN && sudo /bin/dd if=live/live-image-amd64.hybrid.iso of=/dev/rdiskN bs=4m status=progress`
+- Build (as root, Docker or Podman): `docker run --rm --privileged -v "$PWD":/w -w /w -e AUTHORIZED_KEYS="$(cat ~/.ssh/id_rsa.pub)" debian:trixie bash build-live-iso.sh`
 - **Surface with Secure Boot on** (one-time per machine): boot the default entry and wait ~1 min; the linux-surface
   key is queued automatically (`surface-mok.service`). Hold power to turn off, power on: shim shows MokManager
   (blue screen) → Enroll MOK → Continue → Yes → password `surface` → Reboot. Then pick

@@ -4,7 +4,7 @@ set -euxo pipefail
 # Runs inside a privileged debian:trixie container, from any work dir:
 #   docker run --rm --privileged -v "$PWD":/w -w /w \
 #     -e AUTHORIZED_KEYS="$(cat ~/.ssh/id_rsa.pub)" debian:trixie bash build-live-iso.sh
-# Output: ./live/*.iso.  Live login: user / live (ssh password login stays on).
+# Output: ./live/*.iso.  Live login: user / live (ssh: keys from AUTHORIZED_KEYS only).
 apt-get update && apt-get install -y live-build curl
 # live-build's GRUB default entry uses a bare glob (vmlinuz-*amd64): with two Debian kernels it would pick
 # the first (6.12) and label it with the last flavour ("surface"). Pick the newest, like its syslinux code.
@@ -46,7 +46,12 @@ network-manager network-manager-applet openssh-server x11vnc sudo firefox-esr
 calamares calamares-settings-debian
 podman uidmap slirp4netns passt fuse-overlayfs dbus-user-session
 git curl wget jq vim tmux htop unzip zip build-essential
-python3 python3-pip python3-venv pipx ripgrep fd-find
+python3 python3-pip python3-venv pipx ripgrep fd-find python3-dev ipython3 code
+kitty fzf bat eza zoxide shellcheck
+inxi fastfetch btop lshw hwinfo dmidecode lm-sensors smartmontools nvme-cli gsmartcontrol gnome-disk-utility
+stress-ng s-tui powertop acpi fwupd cpu-x hardinfo2 memtester iperf3 brightnessctl
+mesa-utils vainfo vulkan-tools glmark2-x11 glmark2-wayland libinput-tools evtest x11-utils wev
+xournalpp snapshot guvcview pavucontrol
 gparted exfatprogs dosfstools debootstrap parted gdisk rsync
 firmware-linux firmware-misc-nonfree firmware-iwlwifi firmware-realtek
 firmware-atheros firmware-amd-graphics intel-microcode amd64-microcode
@@ -69,6 +74,9 @@ curl -fsSL https://raw.githubusercontent.com/linux-surface/linux-surface/master/
 cp config/archives/linux-surface.key.chroot config/archives/linux-surface.key.binary
 echo 'deb [arch=amd64] https://pkg.surfacelinux.com/debian release main' \
   | tee config/archives/linux-surface.list.chroot > config/archives/linux-surface.list.binary
+# VS Code (official Microsoft build); its package adds its own apt source to the image
+curl -fsSL https://packages.microsoft.com/keys/microsoft.asc -o config/archives/vscode.key.chroot
+echo 'deb [arch=amd64] https://packages.microsoft.com/repos/code stable main' > config/archives/vscode.list.chroot
 
 mkdir -p config/includes.chroot/etc/skel/.ssh \
          config/includes.chroot/etc/systemd/system
@@ -189,6 +197,23 @@ apt-get install -y -t trixie-backports linux-image-amd64 \
 ls /boot/vmlinuz-*; test "$(ls /boot/vmlinuz-*-amd64 | wc -l)" -eq 2   # stable 6.12 + backports
 # linux-surface's kernel .deb doesn't depend on initramfs-tools, so it can install before it and get no initrd
 for k in /boot/vmlinuz-*; do v=${k#/boot/vmlinuz-}; [ -e /boot/initrd.img-$v ] || update-initramfs -c -k "$v"; done
+
+# Node.js: current LTS from nodejs.org into /usr/local (node, npm, npx); uv for Python
+v=$(curl -fsSL https://nodejs.org/dist/index.json | python3 -c 'import json,sys; print(next(r["version"] for r in json.load(sys.stdin) if r["lts"]))')
+curl -fsSL https://nodejs.org/dist/$v/node-$v-linux-x64.tar.xz | tar -xJ -C /usr/local --strip-components=1 --exclude='*.md' --exclude=LICENSE
+node --version && npm --version
+curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin UV_NO_MODIFY_PATH=1 sh && uv --version
+# Nerd Fonts (kitty uses JetBrainsMono); GNOME dock favorites
+for f in JetBrainsMono FiraCode Meslo; do
+  mkdir -p /usr/share/fonts/truetype/nerd-fonts/$f
+  curl -fsSL https://github.com/ryanoasis/nerd-fonts/releases/latest/download/$f.tar.xz | tar -xJ -C /usr/share/fonts/truetype/nerd-fonts/$f
+done
+fc-cache -f
+mkdir -p /etc/xdg/kitty && printf 'font_family JetBrainsMono Nerd Font\nfont_size 11\n' > /etc/xdg/kitty/kitty.conf
+printf "[org.gnome.shell]\nfavorite-apps=['calamares-install-debian.desktop', 'firefox-esr.desktop', 'com.microsoft.VSCode.desktop', 'kitty.desktop', 'org.gnome.Nautilus.desktop', 'libreoffice-writer.desktop', 'org.gnome.Settings.desktop']\n" \
+  > /usr/share/glib-2.0/schemas/99_live-favorites.gschema.override
+glib-compile-schemas /usr/share/glib-2.0/schemas
+which code kitty; for d in calamares-install-debian firefox-esr com.microsoft.VSCode kitty org.gnome.Nautilus libreoffice-writer org.gnome.Settings; do test -e /usr/share/applications/$d.desktop || { echo "missing $d.desktop"; exit 1; }; done
 
 # Neovim latest release + rrmistry.nvim (AstroNvim) for the live user, plugins pre-synced
 curl -fL https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz | tar xz -C /opt

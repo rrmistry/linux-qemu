@@ -30,16 +30,24 @@ light, for netbooks). Both share one filesystem, so LibreOffice etc. are in both
 command line picks the display manager (`/usr/lib/systemd/system-generators/desktop-select`).
 Built on a Linux box with `build-live-iso.sh` (below); `.github/workflows/debian-live-usb.yaml` is the older CI path.
 
-- Live login `user` / `live`; ssh (password + keys from repo variable `LIVE_SSH_AUTHORIZED_KEYS`), x11vnc on localhost:5900
-  (`ssh -L 5900:localhost:5900 user@<ip>`), Firefox ESR, LibreOffice, Neovim + rrmistry.nvim, podman, dev tools, gparted,
+- Live login `user` / `live`; ssh (keys only, from repo variable `LIVE_SSH_AUTHORIZED_KEYS`), x11vnc on localhost:5900
+  (`ssh -L 5900:localhost:5900 user@<ip>`, XFCE only), Firefox ESR, LibreOffice, gparted, podman,
   firmware (incl. Intel SOF audio), pen/touch/rotation (libwacom-surface, iio-sensor-proxy), onboard keyboard (XFCE).
+- Dev: VS Code (Microsoft's apt repo), Node.js LTS (nodejs.org, in `/usr/local`), Python + uv/pipx/ipython,
+  Neovim + rrmistry.nvim, kitty + JetBrainsMono/FiraCode/Meslo Nerd Fonts, fzf/bat/eza/zoxide/ripgrep/fd.
+- In-store hardware checks: `inxi -Fxz`, `fastfetch`, hardinfo2, cpu-x; battery `upower -i $(upower -e | grep BAT)`;
+  disk `gsmartcontrol`/`smartctl`; load + thermals `s-tui`; GPU `glmark2`, `vainfo`, `vulkaninfo`;
+  touch/pen `sudo libinput debug-events`, `evtest`, Xournal++; keys `wev`/`xev`; camera Snapshot; audio `pavucontrol`;
+  `brightnessctl`, `powertop`, `fwupdmgr get-devices`.
+- No persistence entry on purpose: live persistence breaks on kernel updates and is slow on USB. For a USB that
+  keeps changes, boot this one and use "Install Debian" onto a second USB stick.
 - Three kernels. Default **GNOME: Live system (amd64)** = Debian trixie-backports kernel + firmware + Mesa (newest hardware).
   Also listed as **Live system, kernel <version>**: Debian 6.12 LTS (fallback) and `*-surface`
   ([linux-surface](https://github.com/linux-surface/linux-surface): Surface keyboard/trackpad/touch).
   Both Debian kernels boot with Secure Boot on; linux-surface needs its key enrolled once (below) or Secure Boot off. Installed systems keep all
   three; GRUB defaults to linux-surface on Microsoft hardware, newest Debian kernel elsewhere
   (`/etc/default/grub.d/kernel-default.cfg`).
-- ISO is ~3.8 GB (over the 2 GiB release-asset limit, so not published).
+- ISO is ~4.7 GB (over the 2 GiB release-asset limit, so not published).
 - Write to USB (macOS; use `/bin/dd`, GNU dd rejects `4m`):
   `diskutil unmountDisk /dev/diskN && sudo /bin/dd if=live/live-image-amd64.hybrid.iso of=/dev/rdiskN bs=4m status=progress`
 - Build (as root, Docker or Podman): `docker run --rm --privileged -v "$PWD":/w -w /w -e AUTHORIZED_KEYS="$(cat ~/.ssh/id_rsa.pub)" debian:trixie bash build-live-iso.sh`

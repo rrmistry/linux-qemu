@@ -46,7 +46,7 @@ network-manager network-manager-applet openssh-server x11vnc sudo firefox-esr
 calamares calamares-settings-debian
 podman uidmap slirp4netns passt fuse-overlayfs dbus-user-session
 git curl wget jq vim tmux htop unzip zip build-essential
-python3 python3-pip python3-venv pipx ripgrep fd-find python3-dev ipython3 code
+python3 python3-pip python3-venv pipx ripgrep fd-find python3-dev ipython3 code microsoft-edge-stable google-chrome-stable
 kitty fzf bat eza zoxide shellcheck
 inxi fastfetch btop lshw hwinfo dmidecode lm-sensors smartmontools nvme-cli gsmartcontrol gnome-disk-utility
 stress-ng s-tui powertop acpi fwupd cpu-x hardinfo2 memtester iperf3 brightnessctl
@@ -74,9 +74,13 @@ curl -fsSL https://raw.githubusercontent.com/linux-surface/linux-surface/master/
 cp config/archives/linux-surface.key.chroot config/archives/linux-surface.key.binary
 echo 'deb [arch=amd64] https://pkg.surfacelinux.com/debian release main' \
   | tee config/archives/linux-surface.list.chroot > config/archives/linux-surface.list.binary
-# VS Code (official Microsoft build); its package adds its own apt source to the image
+# VS Code, Edge, Chrome (official builds); each package adds its own apt source, so they update once online
 curl -fsSL https://packages.microsoft.com/keys/microsoft.asc -o config/archives/vscode.key.chroot
 echo 'deb [arch=amd64] https://packages.microsoft.com/repos/code stable main' > config/archives/vscode.list.chroot
+curl -fsSL https://packages.microsoft.com/keys/microsoft.asc -o config/archives/edge.key.chroot
+echo 'deb [arch=amd64] https://packages.microsoft.com/repos/edge stable main' > config/archives/edge.list.chroot
+curl -fsSL https://dl.google.com/linux/linux_signing_key.pub -o config/archives/chrome.key.chroot
+echo 'deb [arch=amd64] https://dl.google.com/linux/chrome/deb/ stable main' > config/archives/chrome.list.chroot
 
 mkdir -p config/includes.chroot/etc/skel/.ssh \
          config/includes.chroot/etc/systemd/system
@@ -124,6 +128,18 @@ ln -sf /usr/lib/systemd/system/$dm.service "$2/display-manager.service"
 EOF
 chmod +x config/includes.chroot/usr/lib/systemd/system-generators/desktop-select
 printf '[Seat:*]\nuser-session=xfce\nautologin-session=xfce\n' > config/includes.chroot/etc/lightdm/lightdm.conf.d/60-xfce.conf
+
+# Live session only (live-config component, runs after user-setup): an unlocked empty-password keyring, so
+# Chrome/Edge/VS Code don't ask for a keyring password under autologin. Installed systems are unaffected.
+mkdir -p config/includes.chroot/usr/lib/live/config
+cat > config/includes.chroot/usr/lib/live/config/2000-keyring <<'EOF'
+#!/bin/sh
+d=/home/user/.local/share/keyrings
+[ -d /home/user ] && [ ! -e $d/default ] || exit 0
+mkdir -p $d && printf '[keyring]\ndisplay-name=login\nctime=0\nmtime=0\nlock-on-idle=false\nlock-after=false\n' > $d/login.keyring
+echo login > $d/default && chmod 700 $d && chown -R user:user /home/user/.local
+EOF
+chmod +x config/includes.chroot/usr/lib/live/config/2000-keyring
 
 # The GRUB/syslinux menus live-build generates, duplicated: GNOME entries first (default), then XFCE
 cat > config/hooks/normal/9000-desktops.hook.binary <<'EOF'
@@ -210,10 +226,10 @@ for f in JetBrainsMono FiraCode Meslo; do
 done
 fc-cache -f
 mkdir -p /etc/xdg/kitty && printf 'font_family JetBrainsMono Nerd Font\nfont_size 11\n' > /etc/xdg/kitty/kitty.conf
-printf "[org.gnome.shell]\nfavorite-apps=['calamares-install-debian.desktop', 'firefox-esr.desktop', 'com.microsoft.VSCode.desktop', 'kitty.desktop', 'org.gnome.Nautilus.desktop', 'libreoffice-writer.desktop', 'org.gnome.Settings.desktop']\n" \
+printf "[org.gnome.shell]\nfavorite-apps=['calamares-install-debian.desktop', 'firefox-esr.desktop', 'microsoft-edge.desktop', 'google-chrome.desktop', 'com.microsoft.VSCode.desktop', 'kitty.desktop', 'org.gnome.Nautilus.desktop', 'libreoffice-writer.desktop', 'org.gnome.Settings.desktop']\n" \
   > /usr/share/glib-2.0/schemas/99_live-favorites.gschema.override
 glib-compile-schemas /usr/share/glib-2.0/schemas
-which code kitty; for d in calamares-install-debian firefox-esr com.microsoft.VSCode kitty org.gnome.Nautilus libreoffice-writer org.gnome.Settings; do test -e /usr/share/applications/$d.desktop || { echo "missing $d.desktop"; exit 1; }; done
+which code kitty microsoft-edge google-chrome; for d in calamares-install-debian firefox-esr microsoft-edge google-chrome com.microsoft.VSCode kitty org.gnome.Nautilus libreoffice-writer org.gnome.Settings; do test -e /usr/share/applications/$d.desktop || { echo "missing $d.desktop"; exit 1; }; done
 
 # Neovim latest release + rrmistry.nvim (AstroNvim) for the live user, plugins pre-synced
 curl -fL https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz | tar xz -C /opt

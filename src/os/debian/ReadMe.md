@@ -31,7 +31,7 @@ command line picks the display manager (`/usr/lib/systemd/system-generators/desk
 Built on a Linux box with `build-live-iso.sh` (below); `.github/workflows/debian-live-usb.yaml` is the older CI path.
 
 - Live login `user` / `live`; ssh (keys only, from repo variable `LIVE_SSH_AUTHORIZED_KEYS`), x11vnc on localhost:5900
-  (`ssh -L 5900:localhost:5900 user@<ip>`, XFCE only), Firefox ESR, LibreOffice, gparted, podman,
+  (`ssh -L 5900:localhost:5900 user@<ip>`, XFCE only), Firefox ESR, Microsoft Edge + Google Chrome (official repos), LibreOffice, gparted, podman,
   firmware (incl. Intel SOF audio), pen/touch/rotation (libwacom-surface, iio-sensor-proxy), onboard keyboard (XFCE).
 - Dev: VS Code (Microsoft's apt repo), Node.js LTS (nodejs.org, in `/usr/local`), Python + uv/pipx/ipython,
   Neovim + rrmistry.nvim, kitty + JetBrainsMono/FiraCode/Meslo Nerd Fonts, fzf/bat/eza/zoxide/ripgrep/fd.
@@ -47,7 +47,7 @@ Built on a Linux box with `build-live-iso.sh` (below); `.github/workflows/debian
   Both Debian kernels boot with Secure Boot on; linux-surface needs its key enrolled once (below) or Secure Boot off. Installed systems keep all
   three; GRUB defaults to linux-surface on Microsoft hardware, newest Debian kernel elsewhere
   (`/etc/default/grub.d/kernel-default.cfg`).
-- ISO is ~4.7 GB (over the 2 GiB release-asset limit, so not published).
+- ISO is ~4.8 GB (over the 2 GiB release-asset limit, so not published).
 - Write to USB (macOS; use `/bin/dd`, GNU dd rejects `4m`):
   `diskutil unmountDisk /dev/diskN && sudo /bin/dd if=live/live-image-amd64.hybrid.iso of=/dev/rdiskN bs=4m status=progress`
 - Build (as root, Docker or Podman): `docker run --rm --privileged -v "$PWD":/w -w /w -e AUTHORIZED_KEYS="$(cat ~/.ssh/id_rsa.pub)" debian:trixie bash build-live-iso.sh`

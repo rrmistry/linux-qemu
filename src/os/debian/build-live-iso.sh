@@ -1,11 +1,12 @@
 set -euxo pipefail
 # Debian 13 live ISO (amd64): GNOME (default, touch/2-in-1) + XFCE (light), Calamares "Install Debian" icon.
-# Every boot entry exists twice: "GNOME: ..." (desktop=gnome -> GDM/Wayland) and "XFCE: ..." (desktop=xfce -> LightDM).
+# Every boot entry exists twice: "GNOME: ..." (desktop=gnome -> GDM/Wayland) and "XFCE: ..." (desktop=xfce -> LightDM),
+# plus a last "Install Debian 13" entry: Debian's stock graphical installer from DVD-1 (no live system; offline firmware + desktops).
 # Runs inside a privileged debian:trixie container, from any work dir:
 #   docker run --rm --privileged -v "$PWD":/w -w /w \
 #     -e AUTHORIZED_KEYS="$(cat ~/.ssh/id_rsa.pub)" debian:trixie bash build-live-iso.sh
 # Output: ./live/*.iso.  Live login: user / live (ssh: keys from AUTHORIZED_KEYS only).
-apt-get update && apt-get install -y live-build curl
+apt-get update && apt-get install -y live-build curl xorriso
 # live-build's GRUB default entry uses a bare glob (vmlinuz-*amd64): with two Debian kernels it would pick
 # the first (6.12) and label it with the last flavour ("surface"). Pick the newest, like its syslinux code.
 f=/usr/lib/live/build/binary_grub_cfg
@@ -57,7 +58,7 @@ firmware-linux firmware-misc-nonfree firmware-iwlwifi firmware-realtek
 firmware-atheros firmware-amd-graphics intel-microcode amd64-microcode
 iptsd libwacom-surface iio-sensor-proxy bluez blueman alsa-utils usbutils
 mokutil shim-helpers-amd64-signed
-xserver-xorg-input-wacom onboard thermald
+xserver-xorg-input-all xserver-xorg-input-wacom onboard thermald
 firmware-sof-signed firmware-intel-sound firmware-intel-graphics firmware-intel-misc firmware-mediatek
 firmware-brcm80211 firmware-cirrus firmware-libertas firmware-nvidia-graphics firmware-ti-connectivity
 EOF
@@ -160,6 +161,11 @@ f=isolinux/live.cfg
 grep 'menuentry "' boot/grub/grub.cfg; grep 'menu label' isolinux/live.cfg
 g=$(grep -c 'desktop=gnome' boot/grub/grub.cfg); [ "$g" -eq 8 ] && [ "$(grep -c 'desktop=xfce' boot/grub/grub.cfg)" -eq 8 ]
 grep -q 'desktop=gnome' isolinux/live.cfg && grep -q 'desktop=xfce' isolinux/live.cfg
+# Last entry: Debian's stock DVD-1 installer (grafted via config/includes.binary), no live system
+test -e install.amd/gtk/vmlinuz && test -e install.amd/gtk/initrd.gz && test -e dists/trixie/Release && test -d pool/non-free-firmware && test -d pool/main/g/gnome-session
+printf '\nmenuentry "Install Debian 13 (graphical installer, pick any desktop or none)" {\n\tlinux\t/install.amd/gtk/vmlinuz vga=788 --- quiet\n\tinitrd\t/install.amd/gtk/initrd.gz\n}\n' >> boot/grub/grub.cfg
+printf '\nlabel install-debian\n\tmenu label Install Debian 13 (graphical installer, pick any desktop or none)\n\tlinux /install.amd/gtk/vmlinuz\n\tinitrd /install.amd/gtk/initrd.gz\n\tappend vga=788 --- quiet\n' >> isolinux/live.cfg
+tail -5 boot/grub/grub.cfg
 EOF
 chmod +x config/hooks/normal/9000-desktops.hook.binary
 
@@ -202,7 +208,7 @@ install -D -m644 /tmp/mok/usr/share/linux-surface-secureboot/surface.cer /usr/sh
 rm -rf /tmp/mok /tmp/linux-surface-secureboot-mok_*.deb; cd /
 systemctl set-default graphical.target
 # Default display manager GDM (GNOME); desktop-select switches to LightDM for desktop=xfce
-test -e /usr/lib/systemd/system/gdm.service && test -e /usr/lib/systemd/system/lightdm.service
+test -e /usr/lib/xorg/modules/input/libinput_drv.so && test -e /usr/lib/systemd/system/gdm.service && test -e /usr/lib/systemd/system/lightdm.service
 ln -sf /usr/lib/systemd/system/gdm.service /etc/systemd/system/display-manager.service
 echo /usr/sbin/gdm3 > /etc/X11/default-display-manager
 ls /usr/lib/live/config/ | tr '\n' ' '
@@ -240,6 +246,17 @@ sleep 10; pkill -f tree-sitter || true; sleep 2   # nvim leaves parser builds ru
 rm -rf /etc/skel/.cache || true
 EOF
 chmod +x config/hooks/normal/9000-usb.hook.chroot
+
+# Debian's official DVD-1, unmodified (checksum-verified, cached in the work dir): installer kernel/initrd,
+# package pool incl. firmware and the main desktops, signed dists. Served as the last boot entry (hook above).
+u=https://cdimage.debian.org/debian-cd/current/amd64/iso-dvd
+curl -fsSL $u/SHA256SUMS -o /tmp/SHA256SUMS
+n=$(grep -oE 'debian-[0-9.]+-amd64-DVD-1\.iso$' /tmp/SHA256SUMS)
+[ -f ../$n ] || curl -fsSL $u/$n -o ../$n
+(cd .. && grep " $n\$" /tmp/SHA256SUMS | sha256sum -c)
+mkdir -p config/includes.binary
+for d in install.amd pool dists .disk; do xorriso -osirrox on -indev ../$n -extract /$d config/includes.binary/$d; done
+xorriso -osirrox on -indev ../$n -extract /firmware config/includes.binary/firmware || true  # d-i firmware index, if present
 
 lb build
 ls -lh *.iso

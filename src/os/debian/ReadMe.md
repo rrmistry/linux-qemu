@@ -39,6 +39,10 @@ Built on a Linux box with `build-live-iso.sh` (below); `.github/workflows/debian
   disk `gsmartcontrol`/`smartctl`; load + thermals `s-tui`; GPU `glmark2`, `vainfo`, `vulkaninfo`;
   touch/pen `sudo libinput debug-events`, `evtest`, Xournal++; keys `wev`/`xev`; camera Snapshot; audio `pavucontrol`;
   `brightnessctl`, `powertop`, `fwupdmgr get-devices`.
+- Last entry **Install Debian 13 (graphical installer, pick any desktop or none)**: Debian's stock installer from the
+  official DVD-1 (copied unmodified, checksum-verified), no live system. Firmware and the DVD-1 package pool are on the
+  stick, so Wi-Fi, keyboard/trackpad and a base or desktop install (GNOME fully, others mostly) work offline;
+  tasksel offers every desktop, or none for a server. Uses Debian's stock 6.12 kernel (no linux-surface).
 - No persistence entry on purpose: live persistence breaks on kernel updates and is slow on USB. For a USB that
   keeps changes, boot this one and use "Install Debian" onto a second USB stick.
 - Three kernels. Default **GNOME: Live system (amd64)** = Debian trixie-backports kernel + firmware + Mesa (newest hardware).
@@ -47,7 +51,7 @@ Built on a Linux box with `build-live-iso.sh` (below); `.github/workflows/debian
   Both Debian kernels boot with Secure Boot on; linux-surface needs its key enrolled once (below) or Secure Boot off. Installed systems keep all
   three; GRUB defaults to linux-surface on Microsoft hardware, newest Debian kernel elsewhere
   (`/etc/default/grub.d/kernel-default.cfg`).
-- ISO is ~4.8 GB (over the 2 GiB release-asset limit, so not published).
+- ISO is ~9.3 GB (over the 2 GiB release-asset limit, so not published); needs a 16 GB+ USB stick.
 - Write to USB (macOS; use `/bin/dd`, GNU dd rejects `4m`):
   `diskutil unmountDisk /dev/diskN && sudo /bin/dd if=live/live-image-amd64.hybrid.iso of=/dev/rdiskN bs=4m status=progress`
 - Build (as root, Docker or Podman): `docker run --rm --privileged -v "$PWD":/w -w /w -e AUTHORIZED_KEYS="$(cat ~/.ssh/id_rsa.pub)" debian:trixie bash build-live-iso.sh`
